@@ -150,8 +150,9 @@ async function checkMessages(octokit, branchHeadSha, tagSha, issueTags) {
                             break;
                         }
                     }
-                } else {
-                    core.info('No data');
+                }
+                else {
+                    core.info("No data");
                 }
             }
 
