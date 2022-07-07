@@ -86,11 +86,23 @@ const getPrLabels = async (octokit, prNumber) => {
     return data.labels.map((label) => label.name);
 };
 
-async function checkPullRequest(octokit, context) {
+async function checkPullRequest(octokit, context, issueLabels) {
     const prNumber = context.issue.number || getPullRequestNumber(octokit, context.ref);
     const prLabels = await getPrLabels(octokit, prNumber);
 
-    core.info(`Found PR labels: ${prLabels.toString()}`);
+    core.info(`Found PR labels: ${prLabels}`);
+
+    let releaseBump = "none";
+
+    for (const label of prLabels) {
+        if (issueLabels.indexOf(label.name) >= 0) {
+            core.info("found minor bump label");
+            releaseBump = "minor";
+            break;
+        }
+    }
+
+    return releaseBump;
 }
 
 async function checkMessages(octokit, branchHeadSha, tagSha, issueTags) {
@@ -308,7 +320,7 @@ async function action() {
         // This filters hash tags for major, minor, patch and wip commit messages.
         core.info("commits in branch");
 
-        const msgLevel = await checkMessages(
+        let msgLevel = await checkMessages(
             octokit,
             branchInfo.object.sha,
             latestMainTag ? latestMainTag.commit.sha : "", // terminate at the previous tag
@@ -317,7 +329,11 @@ async function action() {
 
         core.info(`commit messages suggest ${msgLevel} upgrade`);
 
-        await checkPullRequest(octokit, github.context);
+        msgLevel = await checkPullRequest(
+            octokit,
+            github.context,
+            issLabs,
+        );
 
         if (isReleaseBranch(branchName, releaseBranch)) {
             core.info(`${ branchName } is a release branch`);
