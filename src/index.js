@@ -64,6 +64,35 @@ async function loadBranch(octokit, branch) {
     return result.data.shift();
 }
 
+const getPullRequestNumber = (ref) => {
+    core.debug(`Parsing ref: ${ref}`);
+    // This assumes that the ref is in the form of `refs/pull/:prNumber/merge`
+    const prNumber = ref.replace(/refs\/pull\/(\d+)\/merge/, "$1");
+
+    return parseInt(prNumber, 10);
+};
+
+const getPrLabels = async (octokit, prNumber) => {
+    const { data } = await octokit.pulls.get({
+        pull_number: prNumber,
+        owner,
+        repo,
+    });
+
+    if (data.length === 0) {
+        throw new Error(`No Pull Requests found for ${prNumber}.`);
+    }
+
+    return data.labels.map((label) => label.name);
+};
+
+async function checkPullRequest(octokit, context) {
+    const prNumber = context.issue.number || getPullRequestNumber(octokit, context.ref);
+    const prLabels = await getPrLabels(octokit, prNumber);
+
+    core.info(`Found PR labels: ${prLabels.toString()}`);
+}
+
 async function checkMessages(octokit, branchHeadSha, tagSha, issueTags) {
     const sha = branchHeadSha;
 
@@ -285,7 +314,10 @@ async function action() {
             latestMainTag ? latestMainTag.commit.sha : "", // terminate at the previous tag
             issLabs
         );
-        // core.info(`commit messages suggest ${msgLevel} upgrade`);
+
+        core.info(`commit messages suggest ${msgLevel} upgrade`);
+
+        await checkPullRequest(octokit, github.context);
 
         if (isReleaseBranch(branchName, releaseBranch)) {
             core.info(`${ branchName } is a release branch`);
