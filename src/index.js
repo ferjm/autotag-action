@@ -90,14 +90,14 @@ async function checkMessages(octokit, branchHeadSha, tagSha, issueTags) {
     const matcher = new RegExp(/fix(?:es)? #(\d+)\b/);
 
     for (const commit of result.data) {
-        // core.info(commit.message);
+        core.info(commit.message);
         const message = commit.commit.message;
 
         if (commit.sha === tagSha) {
             break;
         }
-        // core.info(`commit is : "${JSON.stringify(commit.commit, undefined, 2)}"`);
-        // core.info(`message is : "${message}" on ${commit.commit.committer.date} (${commit.sha})`);
+        core.info(`commit is : "${JSON.stringify(commit.commit, undefined, 2)}"`);
+        core.info(`message is : "${message}" on ${commit.commit.committer.date} (${commit.sha})`);
 
         if (wip.test(message)) {
             // core.info("found wip message, skip");
@@ -123,10 +123,11 @@ async function checkMessages(octokit, branchHeadSha, tagSha, issueTags) {
         }
 
         if (releaseBump !== "minor" && fix.test(message)) {
-            // core.info("found a fix message, check issue for enhancements");
+            core.info("found a fix message, check issue for enhancements");
 
             const id = matcher.exec(message);
 
+            core.info(`issue id ${id}`);
             if (id && Number(id[1]) > 0) {
                 const issue_number = Number(id[1]);
 
@@ -149,6 +150,8 @@ async function checkMessages(octokit, branchHeadSha, tagSha, issueTags) {
                             break;
                         }
                     }
+                } else {
+                    core.info('No data');
                 }
             }
 
