@@ -15572,11 +15572,13 @@ async function action() {
 
         core.info(`commit messages suggest ${msgLevel} upgrade`);
 
-        msgLevel = await checkPullRequest(
-            octokit,
-            github.context,
-            issLabs,
-        );
+        if (msgLevel === "none") {
+            msgLevel = await checkPullRequest(
+                octokit,
+                github.context,
+                issLabs,
+            );
+        }
 
         if (isReleaseBranch(branchName, releaseBranch)) {
             core.info(`${ branchName } is a release branch`);
