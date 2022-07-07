@@ -95,6 +95,7 @@ async function checkPullRequest(octokit, context, issueLabels) {
     let releaseBump = "none";
 
     for (const label of prLabels) {
+        core.info(`Checking if label ${label} is in ${issueLabels}`);
         if (issueLabels.indexOf(label.name) >= 0) {
             core.info("found minor bump label");
             releaseBump = "minor";
