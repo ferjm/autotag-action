@@ -64,6 +64,48 @@ async function loadBranch(octokit, branch) {
     return result.data.shift();
 }
 
+const getPullRequestNumber = (ref) => {
+    core.debug(`Parsing ref: ${ref}`);
+    // This assumes that the ref is in the form of `refs/pull/:prNumber/merge`
+    const prNumber = ref.replace(/refs\/pull\/(\d+)\/merge/, "$1");
+
+    return parseInt(prNumber, 10);
+};
+
+const getPrLabels = async (octokit, prNumber) => {
+    const { data } = await octokit.rest.pulls.get({
+        pull_number: prNumber,
+        owner,
+        repo,
+    });
+
+    if (data.length === 0) {
+        throw new Error(`No Pull Requests found for ${prNumber}.`);
+    }
+
+    return data.labels.map((label) => label.name);
+};
+
+async function checkPullRequest(octokit, context, issueLabels) {
+    const prNumber = context.issue.number || getPullRequestNumber(octokit, context.ref);
+    const prLabels = await getPrLabels(octokit, prNumber);
+
+    core.info(`Found PR labels: ${prLabels}`);
+
+    let releaseBump = "none";
+
+    for (const label of prLabels) {
+        core.info(`Checking if label ${label} is in ${issueLabels}`);
+        if (issueLabels.indexOf(label) >= 0) {
+            core.info("found minor bump label");
+            releaseBump = "minor";
+            break;
+        }
+    }
+
+    return releaseBump;
+}
+
 async function checkMessages(octokit, branchHeadSha, tagSha, issueTags) {
     const sha = branchHeadSha;
 
@@ -90,14 +132,14 @@ async function checkMessages(octokit, branchHeadSha, tagSha, issueTags) {
     const matcher = new RegExp(/fix(?:es)? #(\d+)\b/);
 
     for (const commit of result.data) {
-        // core.info(commit.message);
+        core.info(commit.message);
         const message = commit.commit.message;
 
         if (commit.sha === tagSha) {
             break;
         }
-        // core.info(`commit is : "${JSON.stringify(commit.commit, undefined, 2)}"`);
-        // core.info(`message is : "${message}" on ${commit.commit.committer.date} (${commit.sha})`);
+        core.info(`commit is : "${JSON.stringify(commit.commit, undefined, 2)}"`);
+        core.info(`message is : "${message}" on ${commit.commit.committer.date} (${commit.sha})`);
 
         if (wip.test(message)) {
             // core.info("found wip message, skip");
@@ -123,10 +165,11 @@ async function checkMessages(octokit, branchHeadSha, tagSha, issueTags) {
         }
 
         if (releaseBump !== "minor" && fix.test(message)) {
-            // core.info("found a fix message, check issue for enhancements");
+            core.info("found a fix message, check issue for enhancements");
 
             const id = matcher.exec(message);
 
+            core.info(`issue id ${id}`);
             if (id && Number(id[1]) > 0) {
                 const issue_number = Number(id[1]);
 
@@ -149,6 +192,9 @@ async function checkMessages(octokit, branchHeadSha, tagSha, issueTags) {
                             break;
                         }
                     }
+                }
+                else {
+                    core.info("No data");
                 }
             }
 
@@ -275,13 +321,22 @@ async function action() {
         // This filters hash tags for major, minor, patch and wip commit messages.
         core.info("commits in branch");
 
-        const msgLevel = await checkMessages(
+        let msgLevel = await checkMessages(
             octokit,
             branchInfo.object.sha,
             latestMainTag ? latestMainTag.commit.sha : "", // terminate at the previous tag
             issLabs
         );
-        // core.info(`commit messages suggest ${msgLevel} upgrade`);
+
+        core.info(`commit messages suggest ${msgLevel} upgrade`);
+
+        if (msgLevel === "none") {
+            msgLevel = await checkPullRequest(
+                octokit,
+                github.context,
+                issLabs,
+            );
+        }
 
         if (isReleaseBranch(branchName, releaseBranch)) {
             core.info(`${ branchName } is a release branch`);
